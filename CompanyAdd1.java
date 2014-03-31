@@ -215,8 +215,8 @@ public class CompanyAdd1 {
 	           
 	           
 	       
-job1.setOutputKeyClass(Text.class);
-	   job1.setOutputValueClass(Text.class);
+               job1.setOutputKeyClass(Text.class);
+	       job1.setOutputValueClass(Text.class);
 	           
 	       job1.setMapperClass(Map1.class);
 	       job1.setReducerClass(Reduce1.class);
@@ -224,8 +224,8 @@ job1.setOutputKeyClass(Text.class);
 	       FileInputFormat.setInputPaths(job1, new Path(args[0]));
 	       //MultipleInputs.addInputPath(job, new Path(args[0]), TextInputFormat.class, Map1.class);
 	       //MultipleInputs.addInputPath(job, new Path(args[1]), TextInputFormat.class, Map2.class);
-           // job1.setOutputFormatClass(SequenceFileAsTextOutputFormat.class);
-     job1.setOutputFormatClass(SequenceFileOutputFormat.class);
+               //job1.setOutputFormatClass(SequenceFileAsTextOutputFormat.class);
+               job1.setOutputFormatClass(SequenceFileOutputFormat.class);
 	       //MultipleOutputs.addNamedOutput(job1, "deneme", TextOutputFormat.class, Text.class, Text.class);    
 	       //FileInputFormat.addInputPath(job, new Path(args[0]));
 	       FileOutputFormat.setOutputPath(job1, new Path(args[2]));
