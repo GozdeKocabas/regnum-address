@@ -49,7 +49,7 @@ import com.amazonaws.services.s3.model.S3Object;
 
 
 
-public class CompanyAdd1 {
+	public class CompanyAdd1 {
 
 	
 	
@@ -57,20 +57,17 @@ public class CompanyAdd1 {
 
 	
 	public static class Map1 extends Mapper<LongWritable, Text, Text, Text> {
-	       //private final static IntWritable one = new IntWritable(1);
 	       
 	
 			
-     public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
+     		public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
 	           String line = value.toString();
-	           String [] words= line.split(",");
+	           String [] words= line.split(","); //every component seperate with ","
 
-	            //context.write(key, value);
-	          //if(words[1].substring(0,1).equals("\""))
-	           
-	           //else
+	            
 	           	try{
 	        	   context.write(new Text(words[1]), new Text(words[0]));
+	        	   //first word is company name(value), second word is register number(key)
 	           	}
 	           	catch (NumberFormatException e) {
 					// TODO: handle exception
@@ -81,7 +78,7 @@ public class CompanyAdd1 {
 	
 	 public static class Reduce1 extends Reducer<Text, Text, Text, Text> {
 	    	
-		 CompanyAdd1 c=new CompanyAdd1();
+	
 	    	public void reduce(Text key, Iterable<Text> values, Context context) 
 	          throws IOException, InterruptedException {
 	    		
@@ -97,12 +94,12 @@ public class CompanyAdd1 {
 	 
 	 public static class Map2 extends Mapper<Text, Text, Text, Text> {
 		
-		 //String [] compname = new String[100000000];
-		 HashMap<String, String> compHouse=new HashMap<String, String>();
+		HashMap<String, String> compHouse=new HashMap<String, String>();
 	      
-		 public void configure(JobConf job) throws IOException{
+		public void configure(JobConf job) throws IOException{
       	   
-      	   AmazonS3 s3Client = new AmazonS3Client(new PropertiesCredentials(
+      	   	//this part is to store output of first map-reduce in compHouse(HashMap). It takes from AmazonS3.
+      	   	AmazonS3 s3Client = new AmazonS3Client(new PropertiesCredentials(
 		                CompanyAdd1.class.getResourceAsStream(
 		                		"AwsCredentials.properties")));
 		       
@@ -117,9 +114,9 @@ public class CompanyAdd1 {
 	           while (b.readLine() != null)
              {
 	        	   
-	        	     String line=b.readLine(); 
-                   String splitarray[] = line.split("\"");
-                   String compName=splitarray[splitarray.length-2];
+	           String line=b.readLine(); 
+                   String splitarray[] = line.split("\""); //output format of first map-reduce is SequenceFileOutputFormat. So we cannot split with " " , split with "
+                   String compName=splitarray[splitarray.length-2]; //compname is in second from the end 
                    String regnum=splitarray[1];
                    compHouse.put(regnum, compName);
                    
@@ -146,27 +143,27 @@ public class CompanyAdd1 {
 	        	   
 	           String content = value.toString();
 	           String addr = key.toString();
-	           String [] nameword;
+	           String [] nameword; //each cell include words of one companyname.
 	          
 		   //   int registernum=0;
 		      int control;
 		      //String companyname;
-		      String [] words = content.split(" ");
+		      String [] words = content.split(" "); //every website content splitted with " "
 		       for(String word : words){
 		    	   control= 0;
-		    	   word.replaceAll("[^0-9A-Z]", "");
-		    	   if(word.length()== 8){
+		    	   word.replaceAll("[^0-9A-Z]", ""); //remove everything except numbers and letters
+		    	   if(word.length()== 8){ //register number is 8 digit
 		    		   if(compHouse.containsKey(word)){
-		    			  // nameword=compHouse.get(word).split(" ");
-		    			  // try{
-		    			   //if(addr.contains(nameword[0]) | addr.contains(nameword[1])){
-		    				   context.write(new Text(word), key);
-		    				 //  break;
-		    			   //}
-		    			   //}
-		    			   //catch(NullPointerException e){
+		    			   nameword=compHouse.get(word).split(" ");//sometimes address of company is not include exact name. For example if company name is "Is Bankası", but website address include just "Is". 
+		    			   try{
+		    			   if(addr.contains(nameword[0]) | addr.contains(nameword[1])){//We control first word or second word of companyname
+		    				   context.write(new Text(word), key);// If it includes companyname, we think it is address of company.
+		    				   break;
+		    			   }
+		    			   }
+		    			   catch(NullPointerException e){
 		    				   
-		    			   //}
+		    			   }
 		    			   }
 		    			   
 		    		   }
@@ -221,14 +218,9 @@ public class CompanyAdd1 {
 	       job1.setMapperClass(Map1.class);
 	       job1.setReducerClass(Reduce1.class);
 	           
-	       FileInputFormat.setInputPaths(job1, new Path(args[0]));
-	       //MultipleInputs.addInputPath(job, new Path(args[0]), TextInputFormat.class, Map1.class);
-	       //MultipleInputs.addInputPath(job, new Path(args[1]), TextInputFormat.class, Map2.class);
-               //job1.setOutputFormatClass(SequenceFileAsTextOutputFormat.class);
+	       FileInputFormat.setInputPaths(job1, new Path(args[0]));//first argument is CompanyHouse data 
                job1.setOutputFormatClass(SequenceFileOutputFormat.class);
-	       //MultipleOutputs.addNamedOutput(job1, "deneme", TextOutputFormat.class, Text.class, Text.class);    
-	       //FileInputFormat.addInputPath(job, new Path(args[0]));
-	       FileOutputFormat.setOutputPath(job1, new Path(args[2]));
+	       FileOutputFormat.setOutputPath(job1, new Path(args[2]));//first map-reduce's output path
 	       
 	       job1.setJarByClass(CompanyAdd1.class);
 	       
@@ -240,7 +232,7 @@ public class CompanyAdd1 {
 	       
 	       
 	       
-	       //job2.setInputFormatClass(TextInputFormat.class);
+	     
 	       job2.setInputFormatClass(SequenceFileInputFormat.class);
 	       
 	       
@@ -252,14 +244,12 @@ public class CompanyAdd1 {
 	       job2.setMapperClass(Map2.class);
 	       job2.setReducerClass(Reduce2.class);
 	           
-	       FileInputFormat.setInputPaths(job2, new Path(args[1]));
-	       //MultipleInputs.addInputPath(job, new Path(args[0]), TextInputFormat.class, Map1.class);
-	       //MultipleInputs.addInputPath(job, new Path(args[1]), TextInputFormat.class, Map2.class);
+	       FileInputFormat.setInputPaths(job2, new Path(args[1])); //Common Crawl Data(In Text Format)
 	       job2.setOutputFormatClass(TextOutputFormat.class);
 	       //job1.setOutputFormatClass(SequenceFileOutputFormat.class);
 	           
 	       //FileInputFormat.addInputPath(job, new Path(args[0]));
-	       FileOutputFormat.setOutputPath(job2, new Path(args[3]));
+	       FileOutputFormat.setOutputPath(job2, new Path(args[3]));// second map-reduce's output path
 	       
 	       job2.setJarByClass(CompanyAdd1.class);
 	       
