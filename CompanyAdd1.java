@@ -5,6 +5,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.StringTokenizer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
@@ -50,7 +52,7 @@ import com.amazonaws.services.s3.model.S3Object;
 
 
 
-public class CompanyAdd1 {
+public class RegnumAdd {
 	//Map1 is a function to get register number as a key, company name as a value.
 	//input for that function is CompanyHouse data. Every step map function takes one line.
 	//output for that function is register number and company name as key-value pair.
@@ -60,21 +62,32 @@ public class CompanyAdd1 {
 		public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
 			String line = value.toString();//to convert each line to string.
 			String [] words= line.split(",");//to split each word for each line by ",".
-
-			try{
-				context.write(new Text(words[1]), new Text(words[0]));//return key-value pair as output
-			}
-			catch (NumberFormatException e) {
-				// TODO: handle exception
-			}
-
+			String compname=words[0];
+			String digit="0123456789";
+				try{
+					for(int i=1; i<words.length; i++){
+						
+						if(words[i].length()==10){
+							if(digit.contains(words[i].substring(3,4))){
+								context.write(new Text(words[i]), new Text(compname));//return key-value pair as output
+								break;
+							}
+						}
+						compname=compname+" "+words[i];
+					}
+				}
+				catch (NumberFormatException e) {
+					// TODO: handle exception
+				}
+			
 		}
+
 	}
 	//Key(Text) Value(Text)---->Key(Text) Value(Text)
 	public static class Reduce1 extends Reducer<Text, Text, Text, Text> {
 		//Reduce1 is a method which combine result of Map1.
 		//input is output from Map1. Each step Reduce1 function takes one key-value pair. 
-		CompanyAdd1 c=new CompanyAdd1();
+	
 		public void reduce(Text key, Iterable<Text> values, Context context)//values is a list of values with same key. 
 				throws IOException, InterruptedException {
 
@@ -93,7 +106,7 @@ public class CompanyAdd1 {
 		public void configure(JobConf job) throws IOException{
 
 			AmazonS3 s3Client = new AmazonS3Client(new PropertiesCredentials(//to connect AmazonS3.
-					CompanyAdd1.class.getResourceAsStream(
+					RegnumAdd.class.getResourceAsStream(
 							"AwsCredentials.properties")));
 
 			S3Object s3object = s3Client.getObject(new GetObjectRequest(//to get output file of Map1-Reduce1.
@@ -109,7 +122,7 @@ public class CompanyAdd1 {
 					String line=b.readLine(); //to read each line.
 					String splitarray[] = line.split("\""); //output format of first map-reduce is SequenceFileOutputFormat.
 					//So we cannot split with " " , split with "
-					String compName=splitarray[splitarray.length-2].replaceAll("[^0-9A-Za-z ]", "").replaceAll("[LIMITEDLTD]", ""); // compname is in second from the end because of SequenceFileFormat.
+					String compName=splitarray[splitarray.length-2].replaceAll("LIMITED|LTD|PLC", ""); // compname is in second from the end because of SequenceFileFormat.
 					//Delete all punctuations and LIMITED or LTD.
 					String regnum=splitarray[1];
 					compHouse.put(regnum, compName);//to add register number and company name into CompHouse(HashMap), when register number is given, to get company name.
@@ -120,7 +133,10 @@ public class CompanyAdd1 {
 
 			catch(NullPointerException e) {
 
-			}	   
+			}	 
+			catch(IndexOutOfBoundsException e) {
+
+			}	
 
 		}
 		//URL of each website(Text) Content of each website(Text)--->Register number(Text) and URL(Text) as pair.
@@ -128,104 +144,134 @@ public class CompanyAdd1 {
 
 			String content = value.toString();//to convert content to string.
 			String addr = key.toString();//to convert address to string.
+			String cleancompanyname=""; 
+			boolean complete=false;
 			String [] nameword; //each cell include words of one companyname.
+			ArrayList<String> possregnums=new ArrayList<String>();
+			String regex ="(([A-Z]){2}([0-9]){5}([A-Z0-9]))|([0-9]{4,7})"; 
+			Pattern pattern = Pattern.compile(regex); 
+			Matcher matcher = pattern.matcher(content); 
+			// int m=0;
+			while (matcher.find()) { 
+				System.out.println(matcher.group());
+				possregnums.add(matcher.group());
+				//   m=m+1;
+			}
+
+			if(addr.substring(0, 4).equals("http")){
+				addr=addr.substring(7);
+			}
+
 			//To get substring of the address(domain address) of each website until "/".
 			String realaddress="";
-			for (int i=0; i<addr.length(); i=i+1){
-				if(addr.substring(i)=="/"){
-					realaddress=addr.substring(0, i);
+			for (int i=1; i<addr.length()+1; i++){
+				if(addr.substring(i-1,i).equals("/")){
+					realaddress=addr.substring(0, i-1);
+					break;
 				}
 			}
 			if(realaddress==""){
 				realaddress=addr;
 			}
+			//System.out.println(realaddress);
 			String companyname;//each company name in CompanyHouse data.
 			int y=0;//increment.
 			ArrayList<String> nameword2=new ArrayList<String>();//List of words of company names after eliminate unnecessary information(example: one character in name)
 			String [] words = content.split(" ");//to split each word in content and add them into array.
-
-			ArrayList<String>lastfour=new ArrayList<String>();//it is a array which includes four words before "LIMITED" or "LTD" in content.
+			ArrayList<String>lastfour=new ArrayList<String>();//it is a array which includes four words before "LIMITED" or "LTD" or PLC in content.
 			lastfour.add("");
 			lastfour.add("");
 			lastfour.add("");
 			lastfour.add("");
 			int increment=0;
 			int index=0;
-			for(String word : words){
-				word.replaceAll("[^0-9A-Za-z]", "");//to delete all punctuations in content.
-				if(word.length()==8){//register number is 8 digits.
-					if(compHouse.containsKey(word)){//to check whether word is equal to register number or not.
-						companyname=compHouse.get(word);//to get company name belongs to that register number.
-						nameword=companyname.split(" ");//to get each word of that company name.
-						//below codes is to eliminate words with one character.
-						for(int k=1; k<nameword.length; k++){
-							if(nameword[k].length()==1){
-								y=y+1;
-							}
-							else{
+			String addrafterslash=addr.substring(realaddress.length(), addr.length());
+			//System.out.println(addrafterslash);
+			for(String possregnum : possregnums){
 
-								nameword2.set(k-y, nameword[k]);//set words after eliminating.
-							}
+				if(compHouse.containsKey(possregnum)){//to check whether word is equal to register number or not.
+					companyname=compHouse.get(possregnum);//to get company name belongs to that register number.
+					System.out.println(companyname);
+					cleancompanyname=companyname.replaceAll("[^a-z0-9 ]", "");
+					System.out.println(cleancompanyname);
+					nameword=cleancompanyname.split(" ");//to get each word of that company name.
+					System.out.println(nameword[0]);
+					//below codes is to eliminate words with one character.
+					for(int k=0; k<nameword.length; k++){
+						if(nameword[k].length()==1){
+							y=y+1;
 						}
+						else{
+
+							nameword2.add(k-y, nameword[k]);//set words after eliminating.
+						}
+					}
+
+					//if address before "/" includes first word or second word of name, write it.
+					//to get real website of company.
+					try {	
+						if(realaddress.contains(nameword2.get(0))){
+							System.out.println(possregnum +"   "+ realaddress);
+
+							complete=true;
+							break;
+						}
+
+						else if(realaddress.contains(nameword2.get(1))){
+							System.out.println(possregnum +"   "+ realaddress);
+
+							complete=true;
+							break;
+						}
+					}
+					catch (IndexOutOfBoundsException e) {
+						// TODO: handle exception
+					}
+					//if address after "/" does not includes first word or second word of name or register number, write it.
+					//to eliminate websites which inform some details about companies
+
+					if(content.contains(companyname)){
 						try {
-							//if address before "/" includes first word or second word of name, write it.
-							//to get real website of company.
-							if(realaddress.contains(nameword2.get(0)) | realaddress.contains(nameword2.get(1))){
-								context.write(new Text(word), new Text(realaddress));
+							if((!(addrafterslash.contains(nameword2.get(0))))&& (!(addrafterslash.contains(possregnum)))){
+								System.out.println(possregnum +"   "+ realaddress);
+
+								complete=true;
 								break;
 							}
-							//if address after "/" does not includes first word or second word of name or register number, write it.
-							//to eliminate websites which inform some details about companies. 
-							else if(!(addr.substring(realaddress.length(), addr.length()).contains(nameword2.get(0)) | 
-									addr.substring(realaddress.length(), addr.length()).contains(nameword2.get(1)) | 
-									addr.substring(realaddress.length(), addr.length()).contains(word)))
-								context.write(new Text(word), new Text(realaddress));
-							break;
+
+							else if((!(addrafterslash.contains(nameword2.get(1))))&& (!(addrafterslash.contains(possregnum)))){
+								System.out.println(possregnum +"   "+ realaddress);
+
+								complete=true;
+								break;
+
+							}
 						}
 						catch (IndexOutOfBoundsException e) {
 							// TODO: handle exception
 						}
+
+
+
 					}
+
+
 				}
+
+			}
+
+				
 				//if content does not include register number.Below codes explains that:
 				//if content includes "LIMITED" or "LTD", then that means it could be website of a company.
 				//So check one word before "LIMITED" or "LTD" whether it is company name or not, if it is not, then check two words before
 				//"LIMITED" or "LTD" and so on.
-				if(word.equals("LIMITED")|word.equals("LTD")){
-					if(compHouse2.containsKey(lastfour.get(4))){
-						if(realaddress.contains(lastfour.get(4))){
-							context.write(new Text(compHouse2.get(lastfour.get(4))),new Text(realaddress));
-							break;
-						}
-					}
-					else if(compHouse2.containsKey(lastfour.get(3)+" "+lastfour.get(4))){
-						if(realaddress.contains(lastfour.get(3)) | realaddress.contains(lastfour.get(4))){
-							context.write(new Text(compHouse2.get(lastfour.get(3)+" "+lastfour.get(4))),new Text(realaddress));
-							break;
-						}
-					}
-					else if(compHouse2.containsKey(lastfour.get(2)+" "+lastfour.get(3)+" "+lastfour.get(4))){
-						if(realaddress.contains(lastfour.get(2)) | realaddress.contains(lastfour.get(3)) | realaddress.contains(lastfour.get(4))){
-							context.write(new Text(compHouse2.get(lastfour.get(2)+" "+lastfour.get(3)+" "+lastfour.get(4))),new Text(realaddress));   
-							break;
-						}
-					}
-					else if(compHouse2.containsKey(lastfour.get(1)+" "+lastfour.get(2)+" "+lastfour.get(3)+" "+lastfour.get(4))){
-						if(realaddress.contains(lastfour.get(1)) | realaddress.contains(lastfour.get(2)) | realaddress.contains(lastfour.get(3)) | realaddress.contains(lastfour.get(4))){
-							context.write(new Text(compHouse2.get(lastfour.get(1)+" "+lastfour.get(2)+" "+lastfour.get(3)+" "+lastfour.get(4))),new Text(realaddress));   
-							break;
-						}
-					}
-				}
-
-				index=(increment % 4);//to set up four words before "LIMITED" or "LTD"
-				lastfour.set(index, word);
-				increment=increment+1;
-
+			
+			if(!complete){
+				context.write(key, new Text("it is not company site"));
 			}
-
 		}
 	}
+	
 
 
 
@@ -271,7 +317,7 @@ public class CompanyAdd1 {
 		//FileInputFormat.addInputPath(job, new Path(args[0]));
 		FileOutputFormat.setOutputPath(job1, new Path(args[1]));
 
-		job1.setJarByClass(CompanyAdd1.class);
+		job1.setJarByClass(RegnumAdd.class);
 
 
 
@@ -297,6 +343,8 @@ public class CompanyAdd1 {
 
 		//FileInputFormat.addInputPath(job, new Path(args[0]));
 		FileOutputFormat.setOutputPath(job2, new Path(args[2]));
+		FileInputFormat.setInputPaths(job2, new Path("s3://aws-publicdatasets/common-crawl/parse-output/segment/1341690169105/textData-00112"));
+		/*
 		String segmentListFile = "s3n://aws-publicdatasets/common-crawl/parse-output/valid_segments.txt";
 
 		FileSystem fs = FileSystem.get(new URI(segmentListFile), conf);
@@ -310,9 +358,9 @@ public class CompanyAdd1 {
 		}
 
 
+	*/
 
-
-		job2.setJarByClass(CompanyAdd1.class);
+		job2.setJarByClass(RegnumAdd.class);
 
 		job2.waitForCompletion(true);
 	}
